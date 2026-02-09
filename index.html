@@ -22,6 +22,7 @@
             --premium-bg: #fff1f2;
             --premium-border: #fda4af;
             --premium-text: #be123c;
+            --delete: #ef4444;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -77,29 +78,41 @@
         .drop-zone p { font-size: 1.1rem; color: #475569; margin-top: 15px; }
         .drop-icon { font-size: 40px; color: #94a3b8; }
         
+        /* Hidden input allows clicking the box */
         #file-input {
             position: absolute; width: 100%; height: 100%; top: 0; left: 0;
             opacity: 0; cursor: pointer;
         }
 
         /* FILE LIST */
-        #file-list {
+        #file-list-container {
             margin-top: 20px;
             text-align: left;
-            display: none; /* Hidden by default */
         }
         .file-item {
             background: #f1f5f9;
-            padding: 10px 15px;
+            padding: 12px 15px;
             margin-bottom: 8px;
             border-radius: 6px;
             font-size: 0.9rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            border: 1px solid #e2e8f0;
         }
+        .file-info { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+        .file-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; font-weight: 500; }
+        .file-size { color: #64748b; font-size: 0.8em; }
+        
+        /* DELETE BUTTON */
+        .btn-delete {
+            background: transparent; border: none; color: var(--delete);
+            cursor: pointer; font-weight: bold; font-size: 1.2rem;
+            padding: 0 10px; transition: color 0.2s;
+        }
+        .btn-delete:hover { color: #b91c1c; transform: scale(1.1); }
 
-        /* ACTION BUTTON */
+        /* MERGE BUTTON */
         .btn-merge {
             width: 100%;
             background: var(--primary);
@@ -125,7 +138,7 @@
         .error { color: #ef4444; }
         .success { color: var(--success); }
 
-        /* MONETIZATION CARD (ADOBE) */
+        /* PREMIUM CARD (ADOBE) */
         .premium-card {
             margin-top: 40px;
             background: linear-gradient(to right, #fff1f2, #fff);
@@ -160,6 +173,7 @@
             .container { padding: 20px; }
             .premium-card { flex-direction: column; text-align: center; }
             .btn-affiliate { width: 100%; }
+            .file-name { max-width: 150px; }
         }
     </style>
     
@@ -176,11 +190,11 @@
 
         <div class="drop-zone" id="drop-zone">
             <div class="drop-icon">📂</div>
-            <p><strong>Click to Select PDFs</strong><br>or drag and drop files here</p>
+            <p><strong>Click to Add PDFs</strong><br>or drag and drop files here</p>
             <input type="file" id="file-input" accept="application/pdf" multiple>
         </div>
 
-        <div id="file-list"></div>
+        <div id="file-list-container"></div>
 
         <button id="merge-btn" class="btn-merge" onclick="mergePdfs()">
             <span>Combine PDFs Now</span>
@@ -208,10 +222,13 @@
 
     <script>
         const fileInput = document.getElementById('file-input');
-        const fileList = document.getElementById('file-list');
+        const fileListContainer = document.getElementById('file-list-container');
         const status = document.getElementById('status');
         const mergeBtn = document.getElementById('merge-btn');
         const dropZone = document.getElementById('drop-zone');
+
+        // GLOBAL STATE to store files cumulatively
+        let allFiles = []; 
 
         // Drag & Drop Visual Effects
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -226,37 +243,86 @@
             dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
         });
 
-        // Handle File Selection (Click or Drop)
-        fileInput.addEventListener('change', handleFiles);
+        // Handle File Selection (Click)
+        fileInput.addEventListener('change', (e) => {
+            addFiles(e.target.files);
+            // Reset input so you can add the same file again if needed
+            fileInput.value = ''; 
+        });
+
+        // Handle File Drop
         dropZone.addEventListener('drop', (e) => {
             const dt = e.dataTransfer;
             const files = dt.files;
-            fileInput.files = files; // Sync with input
-            handleFiles();
+            addFiles(files);
         });
 
-        function handleFiles() {
-            const files = fileInput.files;
-            fileList.innerHTML = '';
-            
-            if (files.length > 0) {
-                fileList.style.display = 'block';
-                Array.from(files).forEach((file, index) => {
-                    const div = document.createElement('div');
-                    div.className = 'file-item';
-                    div.innerHTML = `<span>📄 ${file.name}</span> <span style="color:#64748b; font-size:0.8em">${(file.size/1024/1024).toFixed(2)} MB</span>`;
-                    fileList.appendChild(div);
-                });
+        // Add files to our global list
+        function addFiles(files) {
+            let addedCount = 0;
+            Array.from(files).forEach(file => {
+                if (file.type === 'application/pdf') {
+                    allFiles.push(file);
+                    addedCount++;
+                }
+            });
+
+            if (addedCount > 0) {
+                renderFileList();
                 status.textContent = "";
-                mergeBtn.disabled = false;
+                status.className = "";
             } else {
-                fileList.style.display = 'none';
+                status.textContent = "⚠️ Please drop valid PDF files.";
+                status.className = "error";
             }
         }
 
+        // Render the list of files
+        function renderFileList() {
+            fileListContainer.innerHTML = '';
+            
+            if (allFiles.length === 0) {
+                mergeBtn.disabled = false; // Optional: disable if empty
+                return;
+            }
+
+            allFiles.forEach((file, index) => {
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                
+                // Create File Info
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'file-info';
+                infoDiv.innerHTML = `
+                    <span>📄</span>
+                    <div>
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${(file.size/1024/1024).toFixed(2)} MB</div>
+                    </div>
+                `;
+
+                // Create Delete Button
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-delete';
+                delBtn.innerHTML = '&times;';
+                delBtn.onclick = () => removeFile(index);
+                delBtn.title = "Remove file";
+
+                div.appendChild(infoDiv);
+                div.appendChild(delBtn);
+                fileListContainer.appendChild(div);
+            });
+        }
+
+        // Remove a file from the list
+        function removeFile(index) {
+            allFiles.splice(index, 1);
+            renderFileList();
+        }
+
         async function mergePdfs() {
-            if (fileInput.files.length < 2) {
-                status.textContent = "⚠️ Please select at least 2 PDF files to merge.";
+            if (allFiles.length < 2) {
+                status.textContent = "⚠️ Please add at least 2 PDF files to merge.";
                 status.className = "error";
                 return;
             }
@@ -270,8 +336,8 @@
                 const PDFDocument = PDFLib.PDFDocument;
                 const mergedPdf = await PDFDocument.create();
 
-                // Process files sequentially
-                for (let file of fileInput.files) {
+                // Process files sequentially from our global array
+                for (let file of allFiles) {
                     const arrayBuffer = await file.arrayBuffer();
                     const pdf = await PDFDocument.load(arrayBuffer);
                     const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
